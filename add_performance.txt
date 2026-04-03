@@ -1,0 +1,185 @@
+        <p><strong>Logistic Regression:</strong> ${data.LogisticRegression === 1 ? "Real" : "Fake"}</p>
+        <p><strong>Decision Tree:</strong> ${data.DecisionTree === 1 ? "Real" : "Fake"}</p>
+        <p><strong>Random Forest:</strong> ${data.RandomForest === 1 ? "Real" : "Fake"}</p>
+        <p><strong>Gradient Boosting:</strong> ${data.GradientBoosting === 1 ? "Real" : "Fake"}</p>
+        <p><strong>BERT:</strong> ${data.BERT === 1 ? "Real" : "Fake"} (confidence: ${(data.BERT_confidence * 100).toFixed(2)}%)</p>
+
+import os
+import pickle
+from flask import Flask, request, jsonify, render_template, redirect, url_for, session
+from transformers import pipeline
+from serpapi import GoogleSearch
+
+# =============================
+# Flask App Setup
+# =============================
+app = Flask(__name__)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "supersecretkey")
+
+# =============================
+# User Store (demo only)
+# =============================
+users = {}
+
+# =============================
+# Model files
+# =============================
+MODEL_DIR = os.path.join(os.path.dirname(__file__), "models")
+LR_PATH = os.path.join(MODEL_DIR, "LrModel.pkl")
+DT_PATH = os.path.join(MODEL_DIR, "DtModel.pkl")
+RF_PATH = os.path.join(MODEL_DIR, "RfModel.pkl")
+GB_PATH = os.path.join(MODEL_DIR, "GBModel.pkl")
+VECT_PATH = os.path.join(MODEL_DIR, "vectorizer.pkl")
+
+with open(LR_PATH, "rb") as f: lr_model = pickle.load(f)
+with open(DT_PATH, "rb") as f: dt_model = pickle.load(f)
+with open(RF_PATH, "rb") as f: rf_model = pickle.load(f)
+with open(GB_PATH, "rb") as f: gb_model = pickle.load(f)
+with open(VECT_PATH, "rb") as f: vectorizer = pickle.load(f)
+
+# =============================
+# Load pretrained/fine-tuned BERT
+# =============================
+bert_pipeline = pipeline(
+    "text-classification",
+    model="distilbert-base-uncased-finetuned-sst-2-english"  # Replace with your fine-tuned model path
+)
+
+def predict_with_bert(text: str):
+    snippet = text[:512]
+    out = bert_pipeline(snippet)[0]
+    label_str = out.get("label", "")
+    score = out.get("score", 0.0)
+    label = 1 if label_str.upper().startswith("POS") else 0
+    return int(label), float(score)
+
+# =============================
+# SerpAPI Setup
+# =============================
+SERP_API_KEY = "geMTvuRTnZC8K81ZgtiKhebQ"  # Replace with your key
+
+def verify_with_serpapi(query_text):
+    search = GoogleSearch({
+        "q": query_text,
+        "tbm": "nws",
+        "num": 5,
+        "api_key": "geMTvuRTnZC8K81ZgtiKhebQ"
+    })
+    results = search.get_dict()
+    articles = results.get("news_results", [])
+    return len(articles) > 0
+
+# =============================
+# Weighted Ensemble Function
+# =============================
+def weighted_ensemble(preds, confidences=None, weights=None):
+    if confidences is None:
+        confidences = {k:1.0 for k in preds.keys()}
+    if weights is None:
+        weights = {k:1.0 for k in preds.keys()}
+    
+    vote_scores = {}
+    for model_name, pred in preds.items():
+        vote_scores[pred] = vote_scores.get(pred, 0) + weights.get(model_name,1.0) * confidences.get(model_name,1.0)
+    
+    final_label = max(vote_scores, key=vote_scores.get)
+    return final_label
+
+# =============================
+# Routes
+# =============================
+@app.route("/")
+def home_page():
+    if "user" not in session:
+        return redirect(url_for("login_page"))
+    return render_template("index.html")
+
+@app.route("/signup", methods=["GET", "POST"])
+def signup_page():
+    error = None
+    if request.method == "POST":
+        email = request.form.get("email", "").strip()
+        password = request.form.get("password", "").strip()
+        if not email or not password:
+            error = "Please enter both email and password."
+        elif email in users:
+            error = "Email already registered."
+        else:
+            users[email] = password
+            session["user"] = email
+            return redirect(url_for("home_page"))
+    return render_template("signup.html", error=error)
+
+@app.route("/login", methods=["GET", "POST"])
+def login_page():
+    error = None
+    if request.method == "POST":
+        email = request.form.get("email", "").strip()
+        password = request.form.get("password", "").strip()
+        if users.get(email) == password:
+            session["user"] = email
+            return redirect(url_for("home_page"))
+        else:
+            error = "Invalid email or password."
+    return render_template("login.html", error=error)
+
+@app.route("/logout")
+def logout_page():
+    session.pop("user", None)
+    return redirect(url_for("login_page"))
+
+# =============================
+# Prediction Route
+# =============================
+@app.route("/predict", methods=["POST"])
+def predict_route():
+    if "user" not in session:
+        return jsonify({"error": "User not logged in."}), 401
+    
+    news_text = request.form.get("news_text", "").strip()
+    if not news_text:
+        return jsonify({"error": "Please provide news text."}), 400
+
+    # Classical ML predictions
+    X = vectorizer.transform([news_text])
+    preds = {
+        "LogisticRegression": int(lr_model.predict(X)[0]),
+        "DecisionTree": int(dt_model.predict(X)[0]),
+        "RandomForest": int(rf_model.predict(X)[0]),
+        "GradientBoosting": int(gb_model.predict(X)[0])
+    }
+
+    # BERT prediction
+    bert_pred, bert_score = predict_with_bert(news_text)
+    preds["BERT"] = bert_pred
+    confidences = {**{k:1.0 for k in preds.keys() if k!="BERT"}, "BERT": bert_score}
+
+    # Model weights
+    weights = {"LogisticRegression": 3, "DecisionTree": 1,
+               "RandomForest": 2, "GradientBoosting": 2, "BERT": 5}
+
+    # Weighted ensemble
+    final_result = weighted_ensemble(preds, confidences, weights)
+
+    # BERT high-confidence override
+    BERT_CONF_THRESHOLD = 0.95
+    if bert_score >= BERT_CONF_THRESHOLD:
+        final_result = bert_pred
+
+    # SerpAPI soft verification
+    verified = verify_with_serpapi(news_text[:100])
+    SERPAPI_OVERRIDE = True
+    if SERPAPI_OVERRIDE and verified and final_result == 0:
+        final_result = 1
+
+    # Only return final result
+    return jsonify({
+        "FinalResult": "Real" if final_result == 1 else "Fake"
+    })
+
+# =============================
+# Run App
+# =============================
+if __name__ == "__main__":
+    app.run(debug=True)
+

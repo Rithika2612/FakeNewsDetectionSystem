@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Fake News Detector</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+    <header>
+        <h1>FAKE NEWS DETECTION</h1>
+        <h3 style="color: cadetblue;"><i>Don't Fall for the Hoax: Fact-Check Before You Click.</i></h3>
+        <div id="news-badge">NEWS APP</div>
+    </header>
+    <div>
+        <div class="card" id="news-page">
+            <!-- ✅ removed method/action, JS will handle submission -->
+            <form id="news-form">
+                <textarea id="news-input" name="news_text" placeholder="Paste your news text here..."
+                    required></textarea>
+                <button type="submit">
+                    <span class="button-text">Check News</span>
+                    <span class="loader" id="loader"></span>
+                </button>
+            </form>
+            <div id="results"></div>
+            <button type="button" onclick="logout()" style="margin-top: 20px;">Log Out</button>
+        </div>
+        <div class="card" id="news-card">
+            <h3>LATEST NEWS</h3>
+            <ul id="news-feed"></ul>
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <footer>
+        <center> ~~~ </center>
+    </footer>
+</body>
+
+</html>

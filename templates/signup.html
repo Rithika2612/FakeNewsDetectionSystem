@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Sign Up - Fake News Detector</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+  <header>
+    <h1>FAKE NEWS DETECTION</h1>
+    <h3 style="color: cadetblue;"><i>Don't Fall for the Hoax: Fact-Check Before You Click.</i></h3>
+  </header>
+  <div class="card">
+    <h2>Sign Up</h2>
+    {% if error %}
+    <p style="color:red;">{{ error }}</p>
+    {% endif %}
+
+    <!-- ✅ Fixed: removed POST + added id -->
+    <form id="signup-form">
+      <label for="email">Email:</label>
+      <input type="email" id="signup-email" name="email" required autofocus autocomplete="username" />
+      <label for="password">Password:</label>
+      <input type="password" id="signup-password" name="password" required minlength="6" autocomplete="new-password" />
+      <button type="submit">Sign Up</button>
+    </form>
+
+    <p>Already have an account? <a href="{{ url_for('login_page') }}">Log in here</a></p>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
+    import { getAuth, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js";
+    import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-analytics.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyB7r_r5y_KGeYAbe0veEF5GLxnhKjY7Kng",
+      authDomain: "fakenewsdetection-664f5.firebaseapp.com",
+      projectId: "fakenewsdetection-664f5",
+      storageBucket: "fakenewsdetection-664f5.firebasestorage.app",
+      messagingSenderId: "6074581697",
+      appId: "1:6074581697:web:2676a94c3eb8628c05ca40",
+      measurementId: "G-SL34Y86N7K"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const analytics = getAnalytics(app);
+    const auth = getAuth(app);
+
+    document.getElementById("signup-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const email = document.getElementById("signup-email").value;
+      const password = document.getElementById("signup-password").value;
+
+      createUserWithEmailAndPassword(auth, email, password)
+        .then((userCredential) => {
+          alert("Signup successful .");
+          window.location.href = "/index";
+        })
+        .catch((error) => {
+          alert("Signup failed  " + error.message);
+        });
+    });
+  </script>
+  <footer>
+    <center> ~~~ </center>
+  </footer>
+</body>
+
+</html>
